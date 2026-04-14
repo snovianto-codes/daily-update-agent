@@ -1,0 +1,12 @@
+.env
+token.pickle
+credentials.json
+memory.json
+.gold_last_price.json
+.crypto_last_price.json
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+briefing.log
+briefing_error.log

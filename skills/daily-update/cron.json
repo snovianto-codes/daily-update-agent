@@ -1,0 +1,29 @@
+{
+  "jobs": [
+    {
+      "name": "daily-update-morning",
+      "description": "Daily briefing at 7:30am SGT",
+      "cron": "30 7 * * *",
+      "timezone": "Asia/Singapore",
+      "session": "isolated",
+      "command": "python /Users/novianto/Documents/Python/OpenClaw/daily-update-agent/daily_briefing.py"
+    },
+    {
+      "name": "price-watcher",
+      "description": "Crypto + gold price watcher every 15 minutes",
+      "cron": "*/15 * * * *",
+      "timezone": "Asia/Singapore",
+      "session": "isolated",
+      "command": "python /Users/novianto/Documents/Python/OpenClaw/daily-update-agent/price_watcher.py"
+    },
+    {
+      "name": "stock-watcher",
+      "description": "Stock price watcher at 9:30pm SGT weekdays (US market open)",
+      "cron": "30 21 * * 1-5",
+      "timezone": "Asia/Singapore",
+      "session": "isolated",
+      "command": "python /Users/novianto/Documents/Python/OpenClaw/daily-update-agent/price_watcher.py --stocks-only"
+    }
+  ],
+  "note": "IMPORTANT: Run 'openclaw gateway start' first. OpenClaw does not auto-start on Mac boot."
+}

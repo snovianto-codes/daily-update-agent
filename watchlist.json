@@ -1,0 +1,5 @@
+{
+  "crypto": ["BTC", "ETH"],
+  "stocks": ["DELL"],
+  "gold": true
+}
