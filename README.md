@@ -97,24 +97,25 @@ Edit `.env` with your keys:
 
 ### 4. Set up Gmail OAuth
 
-You need a `credentials.json` from Google Cloud Console (Gmail API, OAuth 2.0 desktop client), then run the auth flow once to generate `token.pickle`:
+You need a `credentials.json` from Google Cloud Console (Gmail API, OAuth 2.0 desktop client), then run the auth flow once to generate `token.json`:
 
 ```bash
 python -c "
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-import pickle, os
+import json
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.compose']
 
 flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
 creds = flow.run_local_server(port=0)
-with open('token.pickle', 'wb') as f:
-    pickle.dump(creds, f)
-print('token.pickle saved')
+with open('token.json', 'w') as f:
+    f.write(creds.to_json())
+print('token.json saved')
 "
 ```
+
+> If you have an existing `token.pickle` from a previous setup, the agent will automatically migrate it to `token.json` on first run and delete the old file.
 
 ### 5. Register cron jobs in OpenClaw
 
@@ -189,6 +190,9 @@ daily-update-agent/
 ├── agent.py                 # Gemini 2.5 Flash ReAct agentic loop
 ├── tools.py                 # Tool functions + Gemini declarations (12 tools)
 ├── price_watcher.py         # Zero-LLM price monitor
+├── run_daily_briefing.py    # Launcher: resolves path portably, calls daily_briefing.py
+├── run_price_watcher.py     # Launcher: resolves path portably, calls price_watcher.py
+├── run_stock_watcher.py     # Launcher: resolves path portably, calls price_watcher.py --stocks-only
 ├── goals.md                 # Agent objectives (loaded at runtime)
 ├── memory.json              # Persistent state — prices + alert_flags (gitignored)
 ├── watchlist.json           # Tracked assets
@@ -210,6 +214,15 @@ daily-update-agent/
 - Gemini 2.5 Flash API key (Google AI Studio)
 - Telegram bot token
 - Gmail OAuth credentials
+
+---
+
+## Security
+
+- **No credentials in source** — `.env`, `credentials.json`, and `token.json` are all gitignored
+- **OAuth token stored as JSON** — uses `google.oauth2.credentials` instead of `pickle`, eliminating the pickle deserialisation RCE vector
+- **Prompt injection defence** — all external string data (email subjects, bodies, weather forecasts) is passed through a regex filter before being handed to the LLM
+- **Telegram token scoped to function** — the bot token is never materialised as a module-level string; it is only interpolated at call time inside `send_telegram()`
 
 ---
 

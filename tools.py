@@ -18,12 +18,12 @@ import os
 import re
 import json
 import base64
-import pickle
 import requests
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.genai import types as genai_types
 
@@ -37,11 +37,11 @@ GOLD_API_KEY     = os.getenv("GOLD_API_KEY", "")
 AV_API_KEY       = os.getenv("ALPHAVANTAGE_API_KEY", "")
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
-TOKEN_FILE      = os.path.join(BASE_DIR, "token.pickle")
+TOKEN_FILE      = os.path.join(BASE_DIR, "token.json")
+TOKEN_FILE_LEGACY = os.path.join(BASE_DIR, "token.pickle")  # migration only
 MEMORY_FILE     = os.path.join(BASE_DIR, "memory.json")
 WATCHLIST_FILE  = os.path.join(BASE_DIR, "watchlist.json")
 
-TG_URL      = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 BINANCE_URL = "https://api.binance.com/api/v3/ticker/price"
 GOLD_URL    = "https://api.gold-api.com/price/XAU"
 AV_URL      = "https://www.alphavantage.co/query"
@@ -93,13 +93,13 @@ def get_weather() -> str:
                     val = entry.get("forecast", "N/A")
                     if isinstance(val, dict):
                         val = val.get("text", "N/A")
-                    lines.append(f"Now (2h): {val}")
+                    lines.append(f"Now (2h): {_sanitize(str(val))}")
                     break
             if not lines and forecasts:
                 val = forecasts[0].get("forecast", "N/A")
                 if isinstance(val, dict):
                     val = val.get("text", "N/A")
-                lines.append(f"Now (2h): {val}")
+                lines.append(f"Now (2h): {_sanitize(str(val))}")
     except Exception as e:
         lines.append(f"2h forecast unavailable: {e}")
 
@@ -118,7 +118,7 @@ def get_weather() -> str:
             wind_spd = wind.get("speed", {})
             lines.append(f"Temp: {temp.get('low','?')}–{temp.get('high','?')}°C | "
                          f"Humidity: {humidity.get('low','?')}–{humidity.get('high','?')}%")
-            lines.append(f"Outlook: {forecast}")
+            lines.append(f"Outlook: {_sanitize(str(forecast))}")
     except Exception as e:
         lines.append(f"24h forecast unavailable: {e}")
 
@@ -277,12 +277,20 @@ def get_stock_price(symbol: str) -> str:
 def _get_gmail_service():
     creds = None
     if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, "rb") as f:
+        with open(TOKEN_FILE) as f:
+            creds = Credentials.from_authorized_user_info(json.load(f))
+    elif os.path.exists(TOKEN_FILE_LEGACY):
+        # One-time migration: convert token.pickle → token.json
+        import pickle
+        with open(TOKEN_FILE_LEGACY, "rb") as f:
             creds = pickle.load(f)
+        with open(TOKEN_FILE, "w") as f:
+            f.write(creds.to_json())
+        os.remove(TOKEN_FILE_LEGACY)
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        with open(TOKEN_FILE, "wb") as f:
-            pickle.dump(creds, f)
+        with open(TOKEN_FILE, "w") as f:
+            f.write(creds.to_json())
     if not creds:
         return None
     return build("gmail", "v1", credentials=creds)
@@ -315,7 +323,7 @@ def get_emails() -> str:
     """
     service = _get_gmail_service()
     if not service:
-        return "Gmail not connected — token.pickle missing or expired."
+        return "Gmail not connected — token.json missing or expired."
 
     try:
         after_ts = int((datetime.now() - timedelta(hours=24)).timestamp())
@@ -358,7 +366,7 @@ def draft_gmail_reply(message_id: str, to: str, subject: str, body: str) -> str:
     """
     service = _get_gmail_service()
     if not service:
-        return "Gmail not connected — token.pickle missing or expired."
+        return "Gmail not connected — token.json missing or expired."
     try:
         original = service.users().messages().get(
             userId="me", id=message_id, format="metadata",
@@ -393,16 +401,19 @@ def draft_gmail_reply(message_id: str, to: str, subject: str, body: str) -> str:
 
 def send_telegram(message: str) -> str:
     """Send message to Telegram. Use Telegram Markdown: *bold*, _italic_, `code`."""
+    if not TELEGRAM_TOKEN:
+        return "Telegram error: TELEGRAM_TOKEN not set."
+    tg_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
         payload = {
             "chat_id":    TELEGRAM_CHAT_ID,
             "text":       message,
             "parse_mode": "Markdown",
         }
-        r = requests.post(TG_URL, json=payload, timeout=10)
+        r = requests.post(tg_url, json=payload, timeout=10)
         if r.status_code == 400:
             payload["parse_mode"] = ""
-            r = requests.post(TG_URL, json=payload, timeout=10)
+            r = requests.post(tg_url, json=payload, timeout=10)
         r.raise_for_status()
         return "Message sent to Telegram. Do not call send_telegram again."
     except Exception as e:

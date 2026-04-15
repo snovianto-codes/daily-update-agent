@@ -37,8 +37,6 @@ WATCHLIST_FILE = BASE_DIR / "watchlist.json"
 BINANCE_URL = "https://api.binance.com/api/v3/ticker/price"
 GOLD_URL    = "https://api.gold-api.com/price/XAU"
 AV_URL      = "https://www.alphavantage.co/query"
-TG_URL      = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-
 
 # ── Memory helpers ────────────────────────────────────────────────────────────
 
@@ -77,14 +75,15 @@ def send_telegram_alert(message: str):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print(f"[Watcher] Telegram not configured — would have sent: {message[:100]}")
         return
+    tg_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        r = requests.post(TG_URL, json={
+        r = requests.post(tg_url, json={
             "chat_id":    TELEGRAM_CHAT_ID,
             "text":       message,
             "parse_mode": "Markdown",
         }, timeout=10)
         if r.status_code == 400:
-            r = requests.post(TG_URL, json={
+            r = requests.post(tg_url, json={
                 "chat_id": TELEGRAM_CHAT_ID,
                 "text":    message,
             }, timeout=10)
